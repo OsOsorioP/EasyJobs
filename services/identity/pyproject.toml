@@ -1,0 +1,19 @@
+[project]
+name = "identity-service"
+version = "0.1.0"
+description = "Servicio de autenticación y autorización de la plataforma"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard]",
+    "uvicorn[standard]",
+    "sqlalchemy",
+    "alembic",
+    "psycopg[binary]",
+    "pydantic-settings",
+    "bcrypt",
+    "pyjwt",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]

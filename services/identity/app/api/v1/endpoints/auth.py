@@ -13,10 +13,12 @@ from app.schemas.user import RefreshRequest, TokenPair, UserLogin, UserRead, Use
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-def register(payload: UserRegister, db: Session = Depends(get_db)) -> UserSQL:
+async def register(payload: UserRegister, db: Session = Depends(get_db)) -> UserSQL:
+    hashed_pw = await hash_password(payload.password)
+
     user = UserSQL(
         email=payload.email,
-        hashed_password=hash_password(payload.password),
+        hashed_password=hashed_pw,
         role=payload.role,
     )
     db.add(user)
@@ -29,10 +31,10 @@ def register(payload: UserRegister, db: Session = Depends(get_db)) -> UserSQL:
     return user
 
 @router.post("/login", response_model=TokenPair)
-def login(payload: UserLogin, db: Session = Depends(get_db)) -> TokenPair:
+async def login(payload: UserLogin, db: Session = Depends(get_db)) -> TokenPair:
     user = db.query(UserSQL).filter(UserSQL.email == payload.email).first()
 
-    if user is None or not verify_password(payload.password, user.hashed_password):
+    if user is None or not await verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     if not user.is_active:
@@ -44,7 +46,7 @@ def login(payload: UserLogin, db: Session = Depends(get_db)) -> TokenPair:
     )
 
 @router.post("/refresh", response_model=TokenPair)
-def refresh(payload: RefreshRequest, db: Session = Depends(get_db)) -> TokenPair:
+async def refresh(payload: RefreshRequest, db: Session = Depends(get_db)) -> TokenPair:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
     )
@@ -67,5 +69,5 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)) -> TokenPair
     )
 
 @router.get("/me", response_model=UserRead)
-def read_current_user(current_user: UserSQL = Depends(get_current_user)) -> UserSQL:
+async def read_current_user(current_user: UserSQL = Depends(get_current_user)) -> UserSQL:
     return current_user

@@ -1,0 +1,25 @@
+[project]
+name = "intelligence-service"
+version = "0.1.0"
+description = "Servicio de análisis cognitivo y procesamiento de lenguaje natural"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard]",
+    "uvicorn[standard]",
+    "pydantic-settings",
+    "langchain-cohere==0.6.0",
+    "python-dotenv",
+    "cohere",
+    "langchain-groq==1.1.3",
+    "langchain",
+    "langchain_core",
+    "langchain-classic",
+    "httpx",
+    "pypdf",
+    "qdrant-client",
+    "tenacity",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]

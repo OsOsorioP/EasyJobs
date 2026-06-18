@@ -17,6 +17,14 @@ class CandidateCreate(CandidateBase):
 class CandidateUpdate(CandidateBase):
     pass
 
+class CandidatePatch(BaseModel):
+    name: Optional[str] = Field(None, min_length=2, max_length=100)
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = Field(None, max_length=30)
+    summary: Optional[str] = None
+    skills: Optional[str] = None
+    experience: Optional[str] = None
+
 class CandidateRead(CandidateBase):
     id: uuid.UUID
     last_indexed_at: Optional[datetime]

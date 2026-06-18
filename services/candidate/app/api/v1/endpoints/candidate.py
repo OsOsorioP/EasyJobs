@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.db.models.candidate import CandidateSQL
-from app.schemas.candidate import CandidateCreate, CandidateRead, CandidateUpdate
+from app.schemas.candidate import CandidateCreate, CandidateRead, CandidateUpdate, CandidatePatch
 from app.api.deps import get_current_user, require_roles
 
 router = APIRouter(prefix="/candidates", tags=["candidates"])
@@ -84,3 +84,31 @@ def delete_candidate(candidate_id: uuid.UUID, db: Session = Depends(get_db)) -> 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
     db.delete(candidate)
     db.commit()
+
+@router.patch(
+    "/{candidate_id}",
+    response_model=CandidateRead,
+    dependencies=[Depends(require_roles("admin", "recruiter"))],
+)
+def patch_candidate(
+    candidate_id: uuid.UUID,
+    payload: CandidatePatch,
+    db: Session = Depends(get_db),
+) -> CandidateSQL:
+    candidate = db.get(CandidateSQL, candidate_id)
+    if candidate is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
+
+    update_data = payload.model_dump(exclude_unset=True)
+
+    for field, value in update_data.items():
+        setattr(candidate, field, value)
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+
+    db.refresh(candidate)
+    return candidate

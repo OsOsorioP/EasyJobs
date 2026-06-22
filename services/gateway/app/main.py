@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.proxy_routes import router
 from app.core.auth_middleware import JWTAuthMiddleware
@@ -19,7 +20,7 @@ async def lifespan(app: FastAPI):
 
     app.state.http_client = httpx.AsyncClient(
         limits=limits,
-        timeout=httpx.Timeout(10.0),
+        timeout=httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0),
     )
     yield
     await app.state.http_client.aclose()
@@ -27,8 +28,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
 
-app.add_middleware(JWTAuthMiddleware)
 app.add_middleware(CorrelationIdMiddleware)
+app.add_middleware(JWTAuthMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOW_ORGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(router)
 

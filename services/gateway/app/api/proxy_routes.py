@@ -15,3 +15,7 @@ async def proxy_candidates(path: str, request: Request) -> Response:
 @router.api_route("/candidates", methods=["GET", "POST"])
 async def proxy_candidates_root(request: Request) -> Response:
     return await forward_request(request, settings.CANDIDATE_SERVICE_URL, "/api/v1/candidates")
+
+@router.api_route("/intelligence/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def proxy_intelligence(path: str, request: Request) -> Response:
+    return await forward_request(request, settings.INTELLIGENCE_SERVICE_URL, f"/api/v1/{path}")

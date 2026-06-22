@@ -6,7 +6,6 @@ from app.db.models.user import UserRole
 class UserRegister(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8, max_length=128)
-    role: UserRole = UserRole.CANDIDATE
 
 class UserLogin(BaseModel):
     email: EmailStr

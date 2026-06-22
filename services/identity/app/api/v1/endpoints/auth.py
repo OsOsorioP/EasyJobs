@@ -7,7 +7,7 @@ from app.api.deps import get_current_user
 from app.core.jwt import create_access_token, create_refresh_token, decode_token
 from app.core.security import hash_password, verify_password
 from app.db.database import get_db
-from app.db.models.user import UserSQL
+from app.db.models.user import UserSQL, UserRole
 from app.schemas.user import RefreshRequest, TokenPair, UserLogin, UserRead, UserRegister
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -19,7 +19,7 @@ async def register(payload: UserRegister, db: Session = Depends(get_db)) -> User
     user = UserSQL(
         email=payload.email,
         hashed_password=hashed_pw,
-        role=payload.role,
+        role=UserRole.RECRUITER,
     )
     db.add(user)
     try:
@@ -41,8 +41,8 @@ async def login(payload: UserLogin, db: Session = Depends(get_db)) -> TokenPair:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
 
     return TokenPair(
-        access_token=create_access_token(user.id, user.role.value),
-        refresh_token=create_refresh_token(user.id, user.role.value),
+        access_token=create_access_token(user.id, user.role.value, email=user.email),
+        refresh_token=create_refresh_token(user.id, user.role.value, email=user.email),
     )
 
 @router.post("/refresh", response_model=TokenPair)
@@ -64,8 +64,8 @@ async def refresh(payload: RefreshRequest, db: Session = Depends(get_db)) -> Tok
         raise credentials_exception
 
     return TokenPair(
-        access_token=create_access_token(user.id, user.role.value),
-        refresh_token=create_refresh_token(user.id, user.role.value),
+        access_token=create_access_token(user.id, user.role.value, email=user.email),
+        refresh_token=create_refresh_token(user.id, user.role.value, email=user.email),
     )
 
 @router.get("/me", response_model=UserRead)

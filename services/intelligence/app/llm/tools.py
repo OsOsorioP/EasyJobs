@@ -1,115 +1,124 @@
+import logging
 import uuid
 
 import httpx
-from langchain.tools import tool
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel
 
 from app.core.config import settings
 from app.llm.utils import external_api_retry
 from app.vector_db.client import qdrant_client
 from app.vector_db.indexer import VectorIndexer
 
+logger = logging.getLogger(__name__)
 
-@tool
-@external_api_retry
-def get_candidate_profile(candidate_id: str) -> str:
-    """Obtiene el perfil detallado de un candidato consumiendo la API interna del microservicio.
 
-    Args:
-        candidate_id (str): Representación hexadecimal del UUID del candidato.
+class CandidateIdInput(BaseModel):
+    candidate_id: str
 
-    Returns:
-        str: Información resumida en texto para contexto del LLM.
-    """
-    try:
-        parsed_uuid = uuid.UUID(candidate_id)
-    except ValueError:
-        return f"Error de validación: El ID '{candidate_id}' provisto no cumple con el estándar RFC 4122 (UUID)."
 
-    url = f"{settings.CANDIDATE_SERVICE_INTERNAL_URL}/api/v1/candidates/{parsed_uuid}"
+class SearchProfilesInput(BaseModel):
+    query_text: str
+    limit: int = 5
 
-    try:
-        with httpx.Client(timeout=settings.LLM_TIMEOUT) as client:
-            response = client.get(url)
 
-            if response.status_code == 404:
-                return f"Error: No existe ningún candidato registrado con el ID {parsed_uuid}."
+class CalculateScoreInput(BaseModel):
+    candidate_profile: str
+    job_description: str
 
-            response.raise_for_status()
-            c = response.json()
 
-            return (
-                f"Nombre completo: {c.get('name')} | "
-                f"Habilidades: {c.get('skills', 'No especificadas')} | "
-                f"Experiencia: {c.get('experience', 'No registrada')} | "
-                f"Resumen: {c.get('summary', 'Sin resumen')}"
+def make_tools(auth_token: str | None = None) -> list:
+    headers = {"Authorization": f"Bearer {auth_token}"} if auth_token else {}
+
+    @external_api_retry
+    def _get_candidate_profile(candidate_id: str) -> str:
+        try:
+            parsed_uuid = uuid.UUID(candidate_id)
+        except ValueError:
+            return f"Error de validación: '{candidate_id}' no es un UUID válido."
+
+        url = f"{settings.CANDIDATE_SERVICE_INTERNAL_URL}/api/v1/candidates/{parsed_uuid}"
+        try:
+            with httpx.Client(timeout=settings.LLM_TIMEOUT) as client:
+                response = client.get(url, headers=headers)
+                if response.status_code == 404:
+                    return f"No existe candidato con ID {parsed_uuid}."
+                response.raise_for_status()
+                c = response.json()
+                return (
+                    f"Nombre: {c.get('name')} | "
+                    f"Habilidades: {c.get('skills') or 'No especificadas'} | "
+                    f"Experiencia: {c.get('experience') or 'No registrada'} | "
+                    f"Resumen: {c.get('summary') or 'Sin resumen'}"
+                )
+        except httpx.HTTPStatusError as exc:
+            return f"Error downstream (HTTP {exc.response.status_code}): {exc.response.text[:200]}"
+        except httpx.RequestError as exc:
+            raise exc  # re-raise so tenacity retries
+
+    @external_api_retry
+    def _search_similar_profiles(query_text: str, limit: int = 5) -> str:
+        """
+        BUG FIX: original implementation returned only name/email/score.
+        The agent prompt instructs to extract the candidate ID from this result
+        to call get_candidate_profile. IDs were never included → agent could never
+        follow its own workflow. Now includes the UUID from Qdrant point.id.
+        """
+        try:
+            embeddings = VectorIndexer.generate_embeddings_batch(
+                [query_text], input_type="search_query"
             )
+            results = qdrant_client.query_points(
+                collection_name=settings.QDRANT_COLLECTION_NAME,
+                query=embeddings[0],
+                limit=limit,
+            )
+            if not results.points:
+                return "No se encontraron candidatos similares."
 
-    except httpx.HTTPStatusError as exc:
-        return f"Error del sistema downstream (Código: {exc.response.status_code}): {exc.response.text}"
-    except httpx.RequestError as exc:
-        raise exc
+            lines = []
+            for p in results.points:
+                name = p.payload.get("name", "Desconocido")
+                email = p.payload.get("email", "")
+                score = p.score
+                candidate_id = str(p.id)  # UUID stored as Qdrant point ID
+                lines.append(
+                    f"- ID: {candidate_id} | {name} ({email}) | similitud: {score:.3f}"
+                )
+            return "\n".join(lines)
 
+        except Exception as exc:
+            logger.error("Error querying Qdrant in search tool: %s", exc)
+            return f"Error al consultar la base vectorial: {exc}"
 
-@tool
-@external_api_retry
-def search_similar_profiles(query_text: str, limit: int = 5) -> str:
-    """Busca candidatos con perfiles semánticamente similares a una descripción dada.
-
-    Útil para calibrar la evaluación de un candidato comparándolo contra perfiles
-    existentes en el sistema, o para encontrar candidatos afines a una vacante.
-
-    Args:
-        query_text (str): Descripción del perfil o vacante a buscar (texto libre).
-        limit (int): Cantidad máxima de resultados similares a retornar.
-
-    Returns:
-        str: Listado de candidatos similares con su score de similitud.
-    """
-    try:
-        embeddings = VectorIndexer.generate_embeddings_batch([query_text])
-        query_vector = embeddings[0]
-
-        results = qdrant_client.search(
-            collection_name=settings.QDRANT_COLLECTION_NAME,
-            query_vector=query_vector,
-            limit=limit,
+    def _calculate_score(candidate_profile: str, job_description: str) -> str:
+        return (
+            "Insumos para evaluación de compatibilidad:\n"
+            f"PERFIL: {candidate_profile}\n"
+            f"VACANTE: {job_description}\n"
+            "Evalúa hard skills (50%), experiencia (30%) y metodologías (20%)."
         )
 
-        if not results:
-            return "No se encontraron candidatos similares en la base vectorial."
-
-        lines = []
-        for point in results:
-            name = point.payload.get("name", "Desconocido")
-            email = point.payload.get("email", "Sin email")
-            lines.append(f"- {name} ({email}) | similitud: {point.score:.3f}")
-
-        return "\n".join(lines)
-
-    except Exception as exc:
-        return f"Error al consultar la base vectorial: {exc}"
-
-
-@tool
-@external_api_retry
-def calculate_score(candidate_profile: str, job_description: str) -> str:
-    """Calcula un puntaje de compatibilidad técnica entre un candidato y una vacante.
-
-    Utilízala cuando el usuario proporcione una descripción de puesto y necesites
-    evaluar qué tan alineado está el perfil del candidato con esos requisitos.
-
-    Args:
-        candidate_profile (str): Texto con el perfil del candidato (skills, experiencia, resumen).
-        job_description (str): Descripción de la vacante o puesto a evaluar.
-
-    Returns:
-        str: Texto descriptivo con matches, gaps y conclusión, listo para que el LLM
-        lo incorpore a su análisis final.
-    """
-    return (
-        "Insumos recibidos para evaluación de compatibilidad:\n"
-        f"PERFIL DEL CANDIDATO: {candidate_profile}\n"
-        f"DESCRIPCIÓN DE LA VACANTE: {job_description}\n"
-        "Evalúa hard skills (50%), profundidad de experiencia (30%) y metodologías (20%), "
-        "siguiendo los criterios del prompt de skill_extraction."
-    )
+    return [
+        StructuredTool(
+            name="get_candidate_profile",
+            description="Obtiene el perfil detallado de un candidato a partir de su UUID.",
+            func=_get_candidate_profile,
+            args_schema=CandidateIdInput,
+        ),
+        StructuredTool(
+            name="search_similar_profiles",
+            description=(
+                "Busca candidatos semánticamente similares a una descripción. "
+                "Retorna ID, nombre, email y similitud. Usa el ID para llamar a get_candidate_profile."
+            ),
+            func=_search_similar_profiles,
+            args_schema=SearchProfilesInput,
+        ),
+        StructuredTool(
+            name="calculate_score",
+            description="Calcula compatibilidad técnica entre un candidato y una vacante.",
+            func=_calculate_score,
+            args_schema=CalculateScoreInput,
+        ),
+    ]

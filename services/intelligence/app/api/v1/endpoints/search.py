@@ -1,7 +1,8 @@
 import logging
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, status
+import jwt
+from fastapi import APIRouter, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
@@ -11,6 +12,20 @@ from app.vector_db.indexer import VectorIndexer
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/search", tags=["search"])
+
+
+def _recruiter_id_from_header(authorization: Optional[str]) -> str:
+    if not authorization:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
+    token = authorization.removeprefix("Bearer ").strip()
+    try:
+        payload = jwt.decode(token, options={"verify_signature": False})
+        sub = payload.get("sub")
+        if not sub:
+            raise ValueError
+        return sub
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 
 class SearchRequest(BaseModel):
@@ -29,22 +44,26 @@ class SearchResult(BaseModel):
 
 
 @router.post("", response_model=List[SearchResult])
-async def search_profiles(payload: SearchRequest) -> List[SearchResult]:
+async def search_profiles(
+    payload: SearchRequest,
+    authorization: Optional[str] = Header(default=None),
+) -> List[SearchResult]:
     if not payload.query.strip():
         return []
+
+    recruiter_id = _recruiter_id_from_header(authorization)
 
     try:
         VectorIndexer.ensure_collection_exists()
 
         embeddings = VectorIndexer.generate_embeddings_batch(
-            [payload.query],
-            input_type="search_query",
+            [payload.query], input_type="search_query"
         )
-        query_vector = embeddings[0]
 
         results = qdrant_client.query_points(
             collection_name=settings.QDRANT_COLLECTION_NAME,
-            query=query_vector,
+            query=embeddings[0],
+            query_filter=VectorIndexer.build_recruiter_filter(recruiter_id),
             limit=payload.limit,
         )
 
@@ -61,6 +80,8 @@ async def search_profiles(payload: SearchRequest) -> List[SearchResult]:
             for point in results.points
         ]
 
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception("Error searching Qdrant")
         raise HTTPException(

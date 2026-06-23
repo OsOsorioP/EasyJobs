@@ -1,32 +1,42 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr
 
-class CandidateBase(BaseModel):
-    name: str = Field(..., min_length=2, max_length=100)
+class CandidateCreate(BaseModel):
+    recruiter_id: uuid.UUID
+    name: str
     email: EmailStr
-    phone: Optional[str] = Field(None, max_length=30)
+    phone: Optional[str] = None
     summary: Optional[str] = None
     skills: Optional[str] = None
     experience: Optional[str] = None
 
-class CandidateCreate(CandidateBase):
-    pass
-
-class CandidateUpdate(CandidateBase):
-    pass
+class CandidateUpdate(BaseModel):
+    name: str
+    email: EmailStr
+    phone: Optional[str] = None
+    summary: Optional[str] = None
+    skills: Optional[str] = None
+    experience: Optional[str] = None
 
 class CandidatePatch(BaseModel):
-    name: Optional[str] = Field(None, min_length=2, max_length=100)
+    name: Optional[str] = None
     email: Optional[EmailStr] = None
-    phone: Optional[str] = Field(None, max_length=30)
+    phone: Optional[str] = None
     summary: Optional[str] = None
     skills: Optional[str] = None
     experience: Optional[str] = None
 
-class CandidateRead(CandidateBase):
+class CandidateRead(BaseModel):
     id: uuid.UUID
+    recruiter_id: uuid.UUID
+    name: str
+    email: str
+    phone: Optional[str]
+    summary: Optional[str]
+    skills: Optional[str]
+    experience: Optional[str]
     last_indexed_at: Optional[datetime]
     created_at: datetime
     updated_at: datetime

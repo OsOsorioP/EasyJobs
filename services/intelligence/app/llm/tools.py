@@ -2,6 +2,7 @@ import logging
 import uuid
 
 import httpx
+import jwt
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel
 
@@ -27,8 +28,19 @@ class CalculateScoreInput(BaseModel):
     job_description: str
 
 
+def _recruiter_id_from_token(auth_token: str | None) -> str | None:
+    if not auth_token:
+        return None
+    try:
+        payload = jwt.decode(auth_token, options={"verify_signature": False})
+        return payload.get("sub")
+    except Exception:
+        return None
+
+
 def make_tools(auth_token: str | None = None) -> list:
     headers = {"Authorization": f"Bearer {auth_token}"} if auth_token else {}
+    recruiter_id = _recruiter_id_from_token(auth_token)
 
     @external_api_retry
     def _get_candidate_profile(candidate_id: str) -> str:
@@ -54,37 +66,33 @@ def make_tools(auth_token: str | None = None) -> list:
         except httpx.HTTPStatusError as exc:
             return f"Error downstream (HTTP {exc.response.status_code}): {exc.response.text[:200]}"
         except httpx.RequestError as exc:
-            raise exc  # re-raise so tenacity retries
+            raise exc
 
     @external_api_retry
     def _search_similar_profiles(query_text: str, limit: int = 5) -> str:
-        """
-        BUG FIX: original implementation returned only name/email/score.
-        The agent prompt instructs to extract the candidate ID from this result
-        to call get_candidate_profile. IDs were never included → agent could never
-        follow its own workflow. Now includes the UUID from Qdrant point.id.
-        """
         try:
             embeddings = VectorIndexer.generate_embeddings_batch(
                 [query_text], input_type="search_query"
             )
+
+            query_filter = (
+                VectorIndexer.build_recruiter_filter(recruiter_id) if recruiter_id else None
+            )
+
             results = qdrant_client.query_points(
                 collection_name=settings.QDRANT_COLLECTION_NAME,
                 query=embeddings[0],
+                query_filter=query_filter,
                 limit=limit,
             )
+
             if not results.points:
                 return "No se encontraron candidatos similares."
 
-            lines = []
-            for p in results.points:
-                name = p.payload.get("name", "Desconocido")
-                email = p.payload.get("email", "")
-                score = p.score
-                candidate_id = str(p.id)  # UUID stored as Qdrant point ID
-                lines.append(
-                    f"- ID: {candidate_id} | {name} ({email}) | similitud: {score:.3f}"
-                )
+            lines = [
+                f"- ID: {str(p.id)} | {p.payload.get('name', '?')} ({p.payload.get('email', '')}) | similitud: {p.score:.3f}"
+                for p in results.points
+            ]
             return "\n".join(lines)
 
         except Exception as exc:
@@ -109,8 +117,8 @@ def make_tools(auth_token: str | None = None) -> list:
         StructuredTool(
             name="search_similar_profiles",
             description=(
-                "Busca candidatos semánticamente similares a una descripción. "
-                "Retorna ID, nombre, email y similitud. Usa el ID para llamar a get_candidate_profile."
+                "Busca candidatos semánticamente similares a una descripción dentro del pool "
+                "del recruiter autenticado. Retorna ID, nombre, email y similitud."
             ),
             func=_search_similar_profiles,
             args_schema=SearchProfilesInput,

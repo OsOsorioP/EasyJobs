@@ -19,6 +19,7 @@ dependencies = [
     "pypdf",
     "qdrant-client",
     "tenacity",
+    "pyjwt",
 ]
 
 [tool.setuptools.packages.find]

@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import federation from '@originjs/vite-plugin-federation'
 
+const remote = process.env.VITE_INTELLIGENCE_REMOTE ?? 'http://localhost:5001/assets/remoteEntry.js';
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -11,7 +13,7 @@ export default defineConfig({
     federation({
       name: 'host',
       remotes: {
-        intelligence: 'http://localhost:5001/assets/remoteEntry.js',
+        intelligence: remote,
       },
       shared: ['react', 'react-dom']
     })

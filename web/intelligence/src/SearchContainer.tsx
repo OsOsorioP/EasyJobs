@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import {
   Search, Cpu, CheckCircle2, AlertTriangle, Briefcase, Sparkles,
   UploadCloud, FileSpreadsheet, Archive, Check, AlertCircle, RefreshCw, Loader2,
-  User, Star,
+  User, Star, Trophy,
 } from 'lucide-react';
 import { etlService } from './lib/services/etl.service';
 import { insightService } from './lib/services/insight.service';
 import { searchService, type SearchCandidateResult } from './lib/services/search.service';
-import type { InsightResult } from './types';
+import { isComparisonInsight, type InsightResult } from './types';
 
 interface SearchContainerProps {
   mode?: 'search' | 'etl';
@@ -93,7 +93,11 @@ export default function SearchContainer({ mode }: SearchContainerProps) {
       const data = await insightService.generate(query);
       setInsight(data);
     } catch (err: any) {
-      setInsightError("El asistente de consultas no se encuentra disponible. Por favor, inténtelo de nuevo más tarde.");
+      console.error('Error al generar la consulta del asistente:', err);
+      setInsightError(
+        err.response?.data?.detail ||
+        "El asistente de consultas no se encuentra disponible. Por favor, inténtelo de nuevo más tarde."
+      );
     } finally {
       setIsLoadingInsight(false);
     }
@@ -293,7 +297,7 @@ export default function SearchContainer({ mode }: SearchContainerProps) {
                     required
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Ej: Compare los candidatos con perfiles de desarrollo web y determine cuáles de ellos cuentan con experiencia en metodologías ágiles..."
+                    placeholder="Ej: Compara los 3 mejores candidatos con experiencia en desarrollo mobile y dime cuál es más apto para un rol de Tech Lead Mobile..."
                     className="w-full h-36 p-4 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-slate-950 focus:border-transparent resize-none leading-relaxed"
                   />
                   <button
@@ -329,7 +333,7 @@ export default function SearchContainer({ mode }: SearchContainerProps) {
             </div>
           )}
 
-          {insight && (
+          {insight && !isComparisonInsight(insight) && (
             <div className="bg-white rounded-2xl shadow-xs border border-slate-200/70 overflow-hidden animate-fade-in">
               <div className="bg-slate-900 p-5 flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -338,7 +342,7 @@ export default function SearchContainer({ mode }: SearchContainerProps) {
                   </div>
                   <div>
                     <h4 className="text-white font-bold text-sm">
-                      {selectedCandidate ? `Informe detallado de perfil: ${selectedCandidate.name}` : 'Resultados de consulta de talentos'}
+                      Informe detallado de perfil: {insight.candidate_name || selectedCandidate?.name || 'Candidato'}
                     </h4>
                     <p className="text-[10px] text-slate-400 tracking-wider uppercase font-bold mt-0.5">Informe consolidado en tiempo real</p>
                   </div>
@@ -361,10 +365,25 @@ export default function SearchContainer({ mode }: SearchContainerProps) {
                     <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Ajuste de vacante</span>
                     <div className="flex items-baseline gap-1 mt-1">
                       <span className="text-3xl font-black text-indigo-600">
-                        {insight.score !== undefined ? (insight.score * 100).toFixed(0) : '0'}%
+                        {(insight.score * 100).toFixed(0)}%
                       </span>
                       <span className="text-xs text-slate-400">compatibilidad</span>
                     </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div className="bg-slate-50 rounded-xl p-3">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Hard Skills</span>
+                    <p className="text-lg font-bold text-slate-900">{(insight.hard_skills_score * 100).toFixed(0)}%</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-xl p-3">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Experiencia</span>
+                    <p className="text-lg font-bold text-slate-900">{(insight.experience_score * 100).toFixed(0)}%</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-xl p-3">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Metodología</span>
+                    <p className="text-lg font-bold text-slate-900">{(insight.methodology_score * 100).toFixed(0)}%</p>
                   </div>
                 </div>
 
@@ -408,6 +427,107 @@ export default function SearchContainer({ mode }: SearchContainerProps) {
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {insight && isComparisonInsight(insight) && (
+            <div className="bg-white rounded-2xl shadow-xs border border-slate-200/70 overflow-hidden animate-fade-in">
+              <div className="bg-slate-900 p-5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="bg-amber-500/20 p-2.5 rounded-xl">
+                    <Sparkles className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div>
+                    <h4 className="text-white font-bold text-sm">Comparativa de candidatos</h4>
+                    <p className="text-[10px] text-slate-400 tracking-wider uppercase font-bold mt-0.5">
+                      Evaluados contra: {insight.evaluated_against}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {insight.winner_name && (
+                  <div className="flex items-start gap-4 bg-amber-50 border border-amber-100 rounded-xl p-4.5">
+                    <div className="bg-amber-100 p-2.5 rounded-xl shrink-0">
+                      <Trophy className="w-5 h-5 text-amber-600" />
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-xs text-amber-700 font-bold uppercase tracking-wider">Candidato más apto</span>
+                      <h5 className="text-lg font-bold text-slate-900">{insight.winner_name}</h5>
+                      <p className="text-sm text-slate-600 leading-relaxed">{insight.verdict}</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-4">
+                  {insight.candidates.map((c) => (
+                    <div
+                      key={c.candidate_id ?? c.candidate_name}
+                      className={`p-4.5 rounded-xl border space-y-3 ${
+                        c.candidate_id === insight.winner_candidate_id
+                          ? 'border-amber-300 bg-amber-50/30'
+                          : 'border-slate-200 bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-slate-400" />
+                          <h6 className="font-bold text-sm text-slate-900">{c.candidate_name}</h6>
+                          {c.candidate_id === insight.winner_candidate_id && (
+                            <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Más apto</span>
+                          )}
+                        </div>
+                        <span className="text-sm font-black text-indigo-600">{(c.score * 100).toFixed(0)}% compatibilidad</span>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-3 text-center">
+                        <div className="bg-slate-50 rounded-lg py-2">
+                          <span className="text-[9px] text-slate-500 font-bold uppercase">Hard Skills</span>
+                          <p className="text-sm font-bold text-slate-800">{(c.hard_skills_score * 100).toFixed(0)}%</p>
+                        </div>
+                        <div className="bg-slate-50 rounded-lg py-2">
+                          <span className="text-[9px] text-slate-500 font-bold uppercase">Experiencia</span>
+                          <p className="text-sm font-bold text-slate-800">{(c.experience_score * 100).toFixed(0)}%</p>
+                        </div>
+                        <div className="bg-slate-50 rounded-lg py-2">
+                          <span className="text-[9px] text-slate-500 font-bold uppercase">Metodología</span>
+                          <p className="text-sm font-bold text-slate-800">{(c.methodology_score * 100).toFixed(0)}%</p>
+                        </div>
+                      </div>
+
+                      {c.summary && (
+                        <p className="text-xs text-slate-600 leading-relaxed">{c.summary}</p>
+                      )}
+
+                      {(c.strengths.length > 0 || c.weaknesses.length > 0) && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                          {c.strengths.length > 0 && (
+                            <ul className="space-y-1.5">
+                              {c.strengths.map((s, i) => (
+                                <li key={i} className="text-xs text-slate-600 flex items-start gap-1.5">
+                                  <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                                  <span>{s}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          {c.weaknesses.length > 0 && (
+                            <ul className="space-y-1.5">
+                              {c.weaknesses.map((w, i) => (
+                                <li key={i} className="text-xs text-slate-600 flex items-start gap-1.5">
+                                  <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                                  <span>{w}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}

@@ -10,6 +10,7 @@ interface CandidateState {
   createCandidate: (candidateData: CandidateFormData) => Promise<boolean>;
   updateCandidate: (id: string, candidateData: Partial<CandidateFormData>) => Promise<boolean>;
   deleteCandidate: (id: string) => Promise<boolean>;
+  deleteAllCandidates: () => Promise<boolean>;
 }
 
 export const useCandidateStore = create<CandidateState>((set, get) => ({
@@ -70,6 +71,21 @@ export const useCandidateStore = create<CandidateState>((set, get) => ({
       set({ 
         error: err.response?.data?.detail || "Error al eliminar el candidato. Verifique sus permisos de administrador.", 
         isLoading: false 
+      });
+      return false;
+    }
+  },
+
+  deleteAllCandidates: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      await candidateService.deleteAll();
+      await get().fetchCandidates();
+      return true;
+    } catch (err: any) {
+      set({
+        error: err.response?.data?.detail || "Error al eliminar el directorio completo de candidatos.",
+        isLoading: false
       });
       return false;
     }

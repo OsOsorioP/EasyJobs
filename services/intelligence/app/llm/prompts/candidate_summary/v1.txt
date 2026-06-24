@@ -22,6 +22,9 @@ FORMATO DE SALIDA REQUERIDO:
 {{
   "summary": "Resumen ejecutivo conciso de la trayectoria del candidato.",
   "score": 0.00,
+  "hard_skills_score": 0.00,
+  "experience_score": 0.00,
+  "methodology_score": 0.00,
   "strengths": [
     "Fortaleza técnica clave 1",
     "Fortaleza técnica clave 2"

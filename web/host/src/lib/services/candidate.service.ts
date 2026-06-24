@@ -31,5 +31,14 @@ export const candidateService = {
    */
   async delete(id: string): Promise<void> {
     await api.delete(`/candidates/${id}`);
+  },
+
+  /**
+   * Elimina todos los candidatos del recruiter autenticado (requiere admin o recruiter).
+   * Pensado para limpiar una carga ETL antes de re-importar.
+   */
+  async deleteAll(): Promise<{ deleted_count: number }> {
+    const response = await api.delete<{ deleted_count: number }>('/candidates/bulk');
+    return response.data;
   }
 };

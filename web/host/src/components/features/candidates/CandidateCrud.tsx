@@ -10,19 +10,20 @@ export default function CandidateCrud() {
   const { user } = useAuthStore();
   const { 
     candidates, isLoading, error,
-    fetchCandidates, createCandidate, updateCandidate, deleteCandidate 
+    fetchCandidates, createCandidate, updateCandidate, deleteCandidate, deleteAllCandidates
   } = useCandidateStore();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCandidate, setEditingCandidate] = useState<Candidate | null>(null);
+  const [isPurgeModalOpen, setIsPurgeModalOpen] = useState(false);
 
   useEffect(() => {
     fetchCandidates();
   }, [fetchCandidates]);
 
   const canModify = user?.role === 'admin' || user?.role === 'recruiter';
-  const canDelete = user?.role === 'admin';
+  const canDelete = user?.role === 'admin' || user?.role === 'recruiter';
 
   const handleOpenCreateModal = () => {
     setEditingCandidate(null);
@@ -40,6 +41,11 @@ export default function CandidateCrud() {
     } else {
       return await createCandidate(payload);
     }
+  };
+
+  const handleConfirmPurge = async () => {
+    await deleteAllCandidates();
+    setIsPurgeModalOpen(false);
   };
 
   const filteredCandidates = candidates.filter(c =>
@@ -68,6 +74,15 @@ export default function CandidateCrud() {
             >
               <UserPlus className="w-4 h-4" />
               <span>Agregar candidato</span>
+            </button>
+          )}
+          {canDelete && candidates.length > 0 && (
+            <button
+              onClick={() => setIsPurgeModalOpen(true)}
+              className="bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-100 font-semibold text-sm py-2 px-4 rounded-xl flex items-center gap-2 transition-all cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+              <span>Eliminar todos</span>
             </button>
           )}
         </div>
@@ -161,6 +176,34 @@ export default function CandidateCrud() {
               onSubmit={handleFormSubmit}
               onCancel={() => setIsModalOpen(false)}
             />
+          </div>
+        </div>
+      )}
+      {isPurgeModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-md overflow-hidden animate-zoom-in">
+            <div className="p-6 space-y-4">
+              <h4 className="font-bold text-base text-slate-900">¿Eliminar todos los candidatos?</h4>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Esta acción eliminará permanentemente los {candidates.length} candidatos de tu directorio
+                (Postgres y el índice vectorial). Úsalo antes de realizar una nueva carga ETL. No se puede deshacer.
+              </p>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setIsPurgeModalOpen(false)}
+                  className="text-slate-600 hover:bg-slate-50 font-semibold text-sm py-2 px-4 rounded-xl transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmPurge}
+                  disabled={isLoading}
+                  className="bg-rose-600 text-white hover:bg-rose-700 font-semibold text-sm py-2 px-4 rounded-xl transition-all cursor-pointer disabled:bg-rose-300"
+                >
+                  Sí, eliminar todo
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

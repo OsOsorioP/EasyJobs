@@ -80,3 +80,21 @@ class VectorIndexer:
         return Filter(
             must=[FieldCondition(key="recruiter_id", match=MatchValue(value=recruiter_id))]
         )
+
+    @staticmethod
+    def delete_by_recruiter(recruiter_id: str) -> None:
+        qdrant_client.delete(
+            collection_name=settings.QDRANT_COLLECTION_NAME,
+            points_selector=VectorIndexer.build_recruiter_filter(recruiter_id),
+        )
+        logger.info("Deleted all vectors for recruiter_id=%s", recruiter_id)
+
+    @staticmethod
+    def delete_by_ids(ids: List[str]) -> None:
+        if not ids:
+            return
+        qdrant_client.delete(
+            collection_name=settings.QDRANT_COLLECTION_NAME,
+            points_selector=ids,
+        )
+        logger.info("Deleted %d vectors by id", len(ids))

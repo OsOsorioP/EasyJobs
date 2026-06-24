@@ -119,6 +119,24 @@ def patch_candidate(
     return candidate
 
 @router.delete(
+    "/bulk",
+    dependencies=[Depends(require_roles("admin", "recruiter"))],
+)
+def delete_all_candidates(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    recruiter_id = _get_recruiter_id(current_user)
+    stmt = select(CandidateSQL).where(CandidateSQL.recruiter_id == recruiter_id)
+    candidates = list(db.scalars(stmt).all())
+    count = len(candidates)
+    for candidate in candidates:
+        db.delete(candidate)
+    db.commit()
+    return {"deleted_count": count}
+
+
+@router.delete(
     "/{candidate_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(require_roles("admin"))],

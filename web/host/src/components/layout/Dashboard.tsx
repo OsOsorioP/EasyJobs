@@ -67,7 +67,7 @@ export default function DashboardLayout() {
 
   return (
     <div className="min-h-screen flex bg-slate-50">
-      <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col shrink-0 shadow-lg">
+      <aside className="sticky top-0 h-screen w-64 bg-slate-900 text-slate-300 flex flex-col shrink-0 shadow-lg">
         <div className="h-16 flex items-center px-6 border-b border-slate-800/60">
           <span className="text-xl font-bold text-white tracking-wider">EasyJobs</span>
         </div>
@@ -110,7 +110,7 @@ export default function DashboardLayout() {
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-white border-b border-slate-200/80 flex items-center justify-between px-8 shadow-xs">
+        <header className="sticky top-0 z-10 h-16 bg-white/95 backdrop-blur border-b border-slate-200/80 flex items-center justify-between px-8 shadow-xs">
           <h2 className="text-lg font-bold text-slate-800">
             {isCognitiveActive ? 'Consola de Análisis Inteligente' : 'Portal de Carga Masiva'}
           </h2>

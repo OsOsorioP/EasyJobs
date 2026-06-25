@@ -14,8 +14,9 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str
 
     TEMPERATURE: float = 0.0
-    MAX_TOKENS: int = 1000
-    LLM_TIMEOUT: float = 30.0
+    MAX_TOKENS: int = 1500
+    MAX_TOKENS_COMPARISON: int = 3000
+    LLM_TIMEOUT: float = 50.0
 
     QDRANT_URL: str
     QDRANT_API_KEY: Optional[str] = None

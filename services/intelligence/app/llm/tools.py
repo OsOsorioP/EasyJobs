@@ -28,6 +28,7 @@ class CalculateScoreInput(BaseModel):
     candidate_skills: str
     candidate_experience: str
     job_description: str
+    semantic_similarity: float = 0.0
 
 
 def _recruiter_id_from_token(auth_token: str | None) -> str | None:
@@ -61,7 +62,26 @@ _SENIORITY_WEIGHTS = {
 }
 
 
-def _hard_skills_score(candidate_skills: str, job_description: str) -> float:
+def _hard_skills_score(candidate_skills: str, job_description: str, semantic_similarity: float = 0.0) -> float:
+    """Compatibilidad técnica candidato-vacante.
+
+    Preferimos `semantic_similarity`: la similitud coseno que Qdrant ya calculó
+    en `search_similar_profiles` (candidato vs. query original del usuario).
+    Reutilizarla evita una llamada nueva a la API de embeddings por cada
+    candidato dentro de `calculate_score` — con varios candidatos esa llamada
+    extra por candidato era la principal causa de timeout en comparativas.
+
+    Si no se provee (ej. análisis individual con un job_description distinto
+    a la query de búsqueda original), se usa matching léxico de tokens como
+    aproximación; es menos preciso para títulos de rol cortos pero no requiere
+    red.
+    """
+    if semantic_similarity > 0:
+        # La similitud coseno de embeddings de texto corto rara vez supera ~0.6-0.7
+        # incluso en pares muy relacionados; se reescala para que ese techo
+        # práctico se traduzca en un score cercano a 1.0.
+        return round(min(max(semantic_similarity, 0.0) / 0.65, 1.0), 2)
+
     job_tokens = _tokenize(job_description)
     skill_tokens = _tokenize(candidate_skills)
     if not job_tokens or not skill_tokens:
@@ -162,8 +182,13 @@ def make_tools(auth_token: str | None = None) -> list:
             logger.error("Error querying Qdrant in search tool: %s", exc)
             return f"Error al consultar la base vectorial: {exc}"
 
-    def _calculate_score(candidate_skills: str, candidate_experience: str, job_description: str) -> str:
-        hard_skills = _hard_skills_score(candidate_skills, job_description)
+    def _calculate_score(
+        candidate_skills: str,
+        candidate_experience: str,
+        job_description: str,
+        semantic_similarity: float = 0.0,
+    ) -> str:
+        hard_skills = _hard_skills_score(candidate_skills, job_description, semantic_similarity)
         experience = _experience_score(candidate_experience)
         methodology = _methodology_score(candidate_skills, candidate_experience)
         overall = round(hard_skills * 0.5 + experience * 0.3 + methodology * 0.2, 2)

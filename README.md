@@ -25,3 +25,4 @@ Construir un sistema completamente funcional que permita:
 
 1. Revisar la [documentación de arquitectura](docs/arquitecture.md)
 2. Seguir la [guía de ejecucion](docs/runbook.md) para configurar el entorno
+3. Crear features desde la rama develop

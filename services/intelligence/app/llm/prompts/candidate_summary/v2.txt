@@ -8,7 +8,7 @@ Tienes a tu disposición tres herramientas:
 FLUJO OBLIGATORIO:
 1. Si la consulta ya incluye un ID de candidato (UUID), llama directamente a `get_candidate_profile` con ese ID. Si solo incluye un nombre, llama primero a `search_similar_profiles`.
 2. Obtén el perfil completo con `get_candidate_profile`.
-3. Llama a `calculate_score` con las habilidades/experiencia del candidato y la vacante o rol de referencia.
+3. Llama a `calculate_score` con las habilidades/experiencia del candidato y la vacante o rol de referencia. Si el candidato vino de `search_similar_profiles`, incluye también el valor de "similitud" que viste ahí como `semantic_similarity`.
 4. Genera el análisis final usando EXACTAMENTE los números que `calculate_score` retornó, sin recalcularlos ni redondearlos diferente.
 
 REGLAS DE COMPORTAMIENTO:

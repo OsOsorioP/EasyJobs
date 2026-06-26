@@ -19,7 +19,7 @@ _EMPTY_SINGLE_INSIGHT = {
     "type": "single",
     "candidate_id": None,
     "candidate_name": None,
-    "summary": "Timeout/Error: la generación del insight falló después de varios reintentos.",
+    "summary": "No fue posible generar el análisis del candidato. Por favor, inténtelo de nuevo.",
     "score": 0,
     "hard_skills_score": 0,
     "experience_score": 0,
@@ -35,7 +35,7 @@ _EMPTY_COMPARISON_INSIGHT = {
     "candidates": [],
     "winner_candidate_id": None,
     "winner_name": None,
-    "verdict": "Timeout/Error: la generación de la comparativa falló después de varios reintentos.",
+    "verdict": "No fue posible generar la comparativa. Esto puede ocurrir cuando hay muchos candidatos a procesar; intente acotar la consulta a un número menor (ej. 'los 3 mejores') o vuelva a intentarlo.",
 }
 
 _COMPARISON_KEYWORDS = (
@@ -88,7 +88,8 @@ class Agent:
         return primary.with_fallbacks([fallback])
 
     def _build_executor(self, auth_token: str | None, comparison: bool) -> AgentExecutor:
-        tools = make_tools(auth_token)
+        max_results = 5 if comparison else 3
+        tools = make_tools(auth_token, max_search_results=max_results)
         prompt = self._comparison_prompt if comparison else self._single_prompt
         llm = self._comparison_llm if comparison else self._single_llm
         agent = create_tool_calling_agent(
@@ -100,7 +101,7 @@ class Agent:
             agent=agent,
             tools=tools,
             verbose=False,
-            max_iterations=25 if comparison else 5,
+            max_iterations=14 if comparison else 5,
         )
 
     @staticmethod
@@ -161,6 +162,15 @@ class Agent:
             parsed.setdefault("type", "comparison" if comparison else "single")
             return parsed
 
+        except asyncio.TimeoutError:
+            logger.error(
+                "Insight generation timed out after %.0fs (comparison=%s): %r",
+                settings.LLM_TIMEOUT, comparison, query,
+            )
+            return empty_fallback
         except Exception as exc:
-            logger.error("Error generating insight: %s", exc)
+            logger.error(
+                "Error generating insight (comparison=%s, query=%r): %s: %s",
+                comparison, query, type(exc).__name__, exc,
+            )
             return empty_fallback

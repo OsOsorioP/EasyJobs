@@ -77,9 +77,6 @@ def _hard_skills_score(candidate_skills: str, job_description: str, semantic_sim
     red.
     """
     if semantic_similarity > 0:
-        # La similitud coseno de embeddings de texto corto rara vez supera ~0.6-0.7
-        # incluso en pares muy relacionados; se reescala para que ese techo
-        # práctico se traduzca en un score cercano a 1.0.
         return round(min(max(semantic_similarity, 0.0) / 0.65, 1.0), 2)
 
     job_tokens = _tokenize(job_description)
@@ -118,7 +115,7 @@ def _methodology_score(candidate_skills: str, candidate_experience: str) -> floa
     return round(min(hits / 3, 1.0), 2)
 
 
-def make_tools(auth_token: str | None = None) -> list:
+def make_tools(auth_token: str | None = None, max_search_results: int = 10) -> list:
     headers = {"Authorization": f"Bearer {auth_token}"} if auth_token else {}
     recruiter_id = _recruiter_id_from_token(auth_token)
 
@@ -151,6 +148,7 @@ def make_tools(auth_token: str | None = None) -> list:
 
     @external_api_retry
     def _search_similar_profiles(query_text: str, limit: int = 5) -> str:
+        effective_limit = min(limit, max_search_results)
         try:
             embeddings = VectorIndexer.generate_embeddings_batch(
                 [query_text], input_type="search_query"
@@ -164,7 +162,7 @@ def make_tools(auth_token: str | None = None) -> list:
                 collection_name=settings.QDRANT_COLLECTION_NAME,
                 query=embeddings[0],
                 query_filter=query_filter,
-                limit=limit,
+                limit=effective_limit,
             )
 
             if not results.points:
@@ -218,9 +216,13 @@ def make_tools(auth_token: str | None = None) -> list:
             name="calculate_score",
             description=(
                 "Calcula de forma determinística hard_skills_score, experience_score, "
-                "methodology_score y score global (0 a 1) comparando las habilidades y "
-                "experiencia textuales del candidato contra la descripción del puesto/vacante. "
-                "Llámala SIEMPRE antes de redactar el score final de cualquier candidato."
+                "methodology_score y score global (0 a 1) para un candidato. "
+                "IMPORTANTE: pasa siempre 'semantic_similarity' con el valor de 'similitud' "
+                "que ya viste para ese candidato en el resultado de search_similar_profiles "
+                "(ej. 'similitud: 0.652' -> semantic_similarity=0.652). No vuelvas a buscar "
+                "ni a calcular esa similitud, solo cópiala. Si analizas un candidato que NO "
+                "vino de search_similar_profiles (ej. tienes su ID directo), omite ese campo. "
+                "Llama a esta tool SIEMPRE antes de redactar el score final de cualquier candidato."
             ),
             func=_calculate_score,
             args_schema=CalculateScoreInput,

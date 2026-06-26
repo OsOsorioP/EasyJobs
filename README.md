@@ -1,3 +1,7 @@
+<p align="center">
+  | <a href="https://github.com/OsOsorioP/EasyJobs/blob/main/README_english.md" target="_blank">English</a> |
+</p>
+
 # EasyJobs
 
 ![alt text](https://img.shields.io/badge/React-313131?style=flat&logo=react)
